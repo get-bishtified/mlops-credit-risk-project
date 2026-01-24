@@ -9,56 +9,64 @@ TRAIN_IMAGE = os.getenv("TRAIN_IMAGE")
 RAW_BUCKET = os.getenv("RAW_BUCKET")
 MODEL_BUCKET = os.getenv("MODEL_BUCKET")
 
+if not all([ROLE_ARN, TRAIN_IMAGE, RAW_BUCKET, MODEL_BUCKET]):
+    raise RuntimeError("Missing required environment variables for training job")
+
 sm = boto3.client("sagemaker", region_name=REGION)
 
 job_name = f"{PROJECT}-train-{int(time.time())}"
 
-response = sm.create_training_job(
+print(f"Starting training job: {job_name}")
+
+sm.create_training_job(
     TrainingJobName=job_name,
     RoleArn=ROLE_ARN,
     AlgorithmSpecification={
         "TrainingImage": TRAIN_IMAGE,
-        "TrainingInputMode": "File",
+        "TrainingInputMode": "File"
     },
-    InputDataConfig=[{
-        "ChannelName": "train",
-        "DataSource": {
-            "S3DataSource": {
-                "S3DataType": "S3Prefix",
-                "S3Uri": f"s3://{RAW_BUCKET}/train/data.csv",
-                "S3DataDistributionType": "FullyReplicated",
-            }
-        },
-        "ContentType": "text/csv",
-    }],
+    InputDataConfig=[
+        {
+            "ChannelName": "train",
+            "DataSource": {
+                "S3DataSource": {
+                    "S3DataType": "S3Prefix",
+                    "S3Uri": f"s3://{RAW_BUCKET}/train/data.csv",
+                    "S3DataDistributionType": "FullyReplicated",
+                }
+            },
+            "ContentType": "text/csv",
+        }
+    ],
     OutputDataConfig={
         "S3OutputPath": f"s3://{MODEL_BUCKET}/artifacts"
     },
     ResourceConfig={
         "InstanceType": "ml.m5.large",
         "InstanceCount": 1,
-        "VolumeSizeInGB": 20,
+        "VolumeSizeInGB": 20
     },
-    StoppingCondition={"MaxRuntimeInSeconds": 3600},
+    StoppingCondition={
+        "MaxRuntimeInSeconds": 3600
+    },
 )
 
-print(f"Started training job: {job_name}")
-
-# Wait for completion
+# Poll until training completes
 while True:
-    desc = sm.describe_training_job(TrainingJobName=job_name)
-    status = desc["TrainingJobStatus"]
-    print("Status:", status)
-    if status in ["Completed", "Failed", "Stopped"]:
-        if status != "Completed":
-            raise RuntimeError(f"Training ended with {status}")
+    d = sm.describe_training_job(TrainingJobName=job_name)
+    status = d["TrainingJobStatus"]
+    print("Training status:", status)
+
+    if status == "Completed":
         break
+    if status in ("Failed", "Stopped"):
+        raise RuntimeError(f"Training job ended with status: {status}")
+
     time.sleep(60)
 
-model_artifacts = desc["ModelArtifacts"]["S3ModelArtifacts"]
-print("MODEL_ARTIFACTS=", model_artifacts)
+artifact = d["ModelArtifacts"]["S3ModelArtifacts"]
+print("Model artifact:", artifact)
+
+# Write artifact path for next pipeline stages
 with open(".env_artifacts", "w") as f:
-    f.write(f"MODEL_ARTIFACTS={model_artifacts}
-")
-```python
-print("Trigger SageMaker training job (placeholder)")
+    f.write(f"MODEL_ARTIFACTS={artifact}\n")
