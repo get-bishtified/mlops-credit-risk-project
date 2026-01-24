@@ -53,10 +53,16 @@ pipeline {
         export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
         export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
         export MODEL_GROUP=$(jq -r .model_package_group_name.value tf.json)
+        export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
+        export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
+        export TRAIN_REPO=$(jq -r .train_repo_url.value tf.json)
 
         echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN" >  "$WORKSPACE/.env_infra"
         echo "ENDPOINT_NAME=$ENDPOINT_NAME"        >> "$WORKSPACE/.env_infra"
         echo "MODEL_GROUP=$MODEL_GROUP"            >> "$WORKSPACE/.env_infra"
+        echo "RAW_BUCKET=$RAW_BUCKET"              >> "$WORKSPACE/.env_infra"
+        echo "MODEL_BUCKET=$MODEL_BUCKET"          >> "$WORKSPACE/.env_infra"
+        echo "TRAIN_IMAGE=$TRAIN_REPO:latest"      >> "$WORKSPACE/.env_infra"
         '''
       }
     }
@@ -108,7 +114,10 @@ pipeline {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
         script {
-          input(message: "Approve model for production?")
+          input(
+            id: 'approve_deploy',
+            message: 'Approve model for production?'
+          )
         }
 
         sh '''
@@ -135,7 +144,10 @@ pipeline {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
         script {
-          input(message: "This will DELETE all AWS resources. Are you sure?")
+          input(
+            id: 'approve_destroy',
+            message: 'This will DELETE all AWS resources. Are you sure?'
+          )
         }
 
         sh '''
