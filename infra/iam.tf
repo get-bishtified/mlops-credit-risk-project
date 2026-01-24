@@ -7,10 +7,7 @@ resource "aws_iam_role" "sagemaker_role" {
       {
         Effect = "Allow"
         Principal = {
-          Service = [
-            "sagemaker.amazonaws.com",
-            "sagemaker.ap-south-1.amazonaws.com"
-          ]
+          Service = "sagemaker.amazonaws.com"
         }
         Action = "sts:AssumeRole"
       }
