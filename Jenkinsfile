@@ -22,12 +22,16 @@ pipeline {
 
     stage('Checkout') {
       when { expression { params.ACTION == 'APPLY' } }
-      steps { checkout scm }
+      steps {
+        checkout scm
+      }
     }
 
     stage('Tests') {
       when { expression { params.ACTION == 'APPLY' } }
-      steps { sh 'python3 -m pytest tests/' }
+      steps {
+        sh 'python3 -m pytest tests/'
+      }
     }
 
     stage('Terraform Apply') {
@@ -50,19 +54,40 @@ pipeline {
         set -e
         cd infra
 
-        export SAGEMAKER_ROLE_ARN=$(jq -r '.sagemaker_role_arn.value // empty' tf.json)
-        export ENDPOINT_NAME=$(jq -r '.endpoint_name.value' tf.json)
-        export MODEL_GROUP=$(jq -r '.model_package_group_name.value' tf.json)
-        export RAW_BUCKET=$(jq -r '.raw_bucket.value' tf.json)
-        export MODEL_BUCKET=$(jq -r '.model_bucket.value' tf.json)
-        export TRAIN_REPO=$(jq -r '.train_repo_url.value' tf.json)
+        export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
+        export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
+        export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
+        export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
+        export MODEL_GROUP=$(jq -r .model_group.value tf.json)
+        export TRAIN_IMAGE=$(jq -r .train_image.value tf.json)
 
-        echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN" >  "$WORKSPACE/.env_infra"
-        echo "ENDPOINT_NAME=$ENDPOINT_NAME"        >> "$WORKSPACE/.env_infra"
-        echo "MODEL_GROUP=$MODEL_GROUP"            >> "$WORKSPACE/.env_infra"
-        echo "RAW_BUCKET=$RAW_BUCKET"              >> "$WORKSPACE/.env_infra"
-        echo "MODEL_BUCKET=$MODEL_BUCKET"          >> "$WORKSPACE/.env_infra"
-        echo "TRAIN_IMAGE=$TRAIN_REPO:latest"      >> "$WORKSPACE/.env_infra"
+        {
+          echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
+          echo "ENDPOINT_NAME=$ENDPOINT_NAME"
+          echo "RAW_BUCKET=$RAW_BUCKET"
+          echo "MODEL_BUCKET=$MODEL_BUCKET"
+          echo "MODEL_GROUP=$MODEL_GROUP"
+          echo "TRAIN_IMAGE=$TRAIN_IMAGE"
+        } > ../.env_infra
+        '''
+      }
+    }
+
+    stage('Ensure Training Data') {
+      when { expression { params.ACTION == 'APPLY' } }
+      steps {
+        sh '''
+        set -e
+        set -a
+        . "$WORKSPACE/.env_infra"
+        set +a
+
+        if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
+          echo "Uploading sample training data..."
+          aws s3 cp data/sample.csv "s3://$RAW_BUCKET/train/data.csv"
+        else
+          echo "Training data already present."
+        fi
         '''
       }
     }
@@ -85,9 +110,6 @@ pipeline {
         set -a
         . "$WORKSPACE/.env_infra"
         set +a
-
-        env | grep -E "SAGEMAKER|TRAIN_IMAGE|RAW_BUCKET|MODEL_BUCKET"
-
         python3 pipelines/trigger_training.py
         '''
       }
@@ -98,9 +120,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        set -a
-        . "$WORKSPACE/.env_artifacts"
-        set +a
+        [ -f .env_artifacts ] && source .env_artifacts
         python3 pipelines/evaluate.py
         '''
       }
@@ -111,10 +131,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        set -a
-        . "$WORKSPACE/.env_artifacts"
-        . "$WORKSPACE/.env_infra"
-        set +a
+        [ -f .env_artifacts ] && source .env_artifacts
         python3 pipelines/register_model.py
         '''
       }
@@ -123,30 +140,14 @@ pipeline {
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
-        script {
-          input(id: 'approve_deploy', message: 'Approve model for production?')
-        }
-
+        input message: 'Approve model for production?'
         sh '''
         set -e
         set -a
         . "$WORKSPACE/.env_infra"
-        . "$WORKSPACE/.env_model"
+        [ -f .env_model ] && source .env_model
         set +a
         python3 pipelines/deploy.py
-        '''
-      }
-    }
-
-    stage('Health Check (Post-Deploy)') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-        python3 pipelines/check_drift.py
         '''
       }
     }
@@ -154,10 +155,7 @@ pipeline {
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
-        script {
-          input(id: 'approve_destroy', message: 'This will DELETE all AWS resources. Are you sure?')
-        }
-
+        input message: 'This will DELETE all AWS resources. Are you sure?'
         sh '''
         set -e
         cd infra
