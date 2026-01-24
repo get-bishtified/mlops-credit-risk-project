@@ -11,17 +11,20 @@ REQUIRED = [
 
 missing = [k for k in REQUIRED if not os.getenv(k)]
 if missing:
-    raise RuntimeError(f"Missing required environment variables for training job: {', '.join(missing)}")
+    raise RuntimeError(
+        f"Missing required environment variables for training job: {', '.join(missing)}"
+    )
 
-ROLE_ARN    = os.getenv("SAGEMAKER_ROLE_ARN")
-TRAIN_IMAGE = os.getenv("TRAIN_IMAGE")
-RAW_BUCKET  = os.getenv("RAW_BUCKET")
+ROLE_ARN     = os.getenv("SAGEMAKER_ROLE_ARN")
+TRAIN_IMAGE  = os.getenv("TRAIN_IMAGE")
+RAW_BUCKET   = os.getenv("RAW_BUCKET")
 MODEL_BUCKET = os.getenv("MODEL_BUCKET")
 
 region = os.getenv("AWS_REGION", "ap-south-1")
 sm = boto3.client("sagemaker", region_name=region)
 
 job_name = f"credit-mlops-train-{int(time.time())}"
+
 print(f"Starting training job: {job_name}")
 print("Using ROLE_ARN:", ROLE_ARN)
 print("Using TRAIN_IMAGE:", TRAIN_IMAGE)
@@ -33,10 +36,8 @@ response = sm.create_training_job(
     RoleArn=ROLE_ARN,
     AlgorithmSpecification={
         "TrainingImage": TRAIN_IMAGE,
-        "TrainingInputMode": "File"
-    },
-    # REQUIRED for private ECR images
-    TrainingImageConfig={
+        "TrainingInputMode": "File",
+        # Backward-compatible way for private ECR images
         "TrainingRepositoryAccessMode": "VPC"
     },
     InputDataConfig=[
@@ -65,10 +66,10 @@ response = sm.create_training_job(
     }
 )
 
-# Persist artifacts for downstream stages
+# Persist artifacts for downstream pipeline stages
 with open(".env_artifacts", "w") as f:
     f.write(f"TRAINING_JOB_NAME={job_name}\n")
     f.write(f"MODEL_ARTIFACTS=s3://{MODEL_BUCKET}/artifacts/\n")
 
-print("Training job submitted.")
+print("Training job submitted successfully.")
 print("Job:", job_name)
