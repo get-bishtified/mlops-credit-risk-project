@@ -77,7 +77,7 @@ pipeline {
         sh '''
         set -e
         . "$WORKSPACE/.env_infra"
-        python pipelines/trigger_training.py
+        python3 pipelines/trigger_training.py
         '''
       }
     }
@@ -88,7 +88,7 @@ pipeline {
         sh '''
         set -e
         . "$WORKSPACE/.env_artifacts"
-        python pipelines/evaluate.py
+        python3 pipelines/evaluate.py
         '''
       }
     }
@@ -99,7 +99,7 @@ pipeline {
         sh '''
         set -e
         . "$WORKSPACE/.env_artifacts"
-        python pipelines/register_model.py
+        python3 pipelines/register_model.py
         '''
       }
     }
@@ -115,7 +115,7 @@ pipeline {
         set -e
         . "$WORKSPACE/.env_infra"
         . "$WORKSPACE/.env_model"
-        python pipelines/deploy.py
+        python3 pipelines/deploy.py
         '''
       }
     }
@@ -126,7 +126,7 @@ pipeline {
         sh '''
         set -e
         . "$WORKSPACE/.env_infra"
-        python pipelines/check_drift.py
+        python3 pipelines/check_drift.py
         '''
       }
     }
