@@ -49,13 +49,14 @@ pipeline {
         sh '''
         set -e
         cd infra
+
         export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
         export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
         export MODEL_GROUP=$(jq -r .model_package_group_name.value tf.json)
 
-        echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN" > ../.env_infra
-        echo "ENDPOINT_NAME=$ENDPOINT_NAME" >> ../.env_infra
-        echo "MODEL_GROUP=$MODEL_GROUP" >> ../.env_infra
+        echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN" >  "$WORKSPACE/.env_infra"
+        echo "ENDPOINT_NAME=$ENDPOINT_NAME"        >> "$WORKSPACE/.env_infra"
+        echo "MODEL_GROUP=$MODEL_GROUP"            >> "$WORKSPACE/.env_infra"
         '''
       }
     }
@@ -75,7 +76,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_infra ] && source .env_infra
+        . "$WORKSPACE/.env_infra"
         python pipelines/trigger_training.py
         '''
       }
@@ -86,7 +87,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && source .env_artifacts
+        . "$WORKSPACE/.env_artifacts"
         python pipelines/evaluate.py
         '''
       }
@@ -97,7 +98,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && source .env_artifacts
+        . "$WORKSPACE/.env_artifacts"
         python pipelines/register_model.py
         '''
       }
@@ -107,15 +108,13 @@ pipeline {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
         script {
-          input {
-            message "Approve model for production?"
-          }
+          input(message: "Approve model for production?")
         }
 
         sh '''
         set -e
-        [ -f .env_infra ] && source .env_infra
-        [ -f .env_model ] && source .env_model
+        . "$WORKSPACE/.env_infra"
+        . "$WORKSPACE/.env_model"
         python pipelines/deploy.py
         '''
       }
@@ -126,7 +125,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_infra ] && source .env_infra
+        . "$WORKSPACE/.env_infra"
         python pipelines/check_drift.py
         '''
       }
@@ -136,9 +135,7 @@ pipeline {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
         script {
-          input {
-            message "This will DELETE all AWS resources. Are you sure?"
-          }
+          input(message: "This will DELETE all AWS resources. Are you sure?")
         }
 
         sh '''
