@@ -2,7 +2,11 @@ pipeline {
   agent any
 
   parameters {
-    choice(name: 'ACTION', choices: ['APPLY', 'DESTROY'], description: 'Provision or destroy all infrastructure')
+    choice(
+      name: 'ACTION',
+      choices: ['APPLY', 'DESTROY'],
+      description: 'Provision or destroy all infrastructure'
+    )
   }
 
   environment {
@@ -98,8 +102,13 @@ pipeline {
 
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
-      input 'Approve model for production?'
       steps {
+        script {
+          input {
+            message "Approve model for production?"
+          }
+        }
+
         sh '''
         set -e
         [ -f .env_infra ] && source .env_infra
@@ -111,8 +120,13 @@ pipeline {
 
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
-      input 'This will DELETE all AWS resources. Are you sure?'
       steps {
+        script {
+          input {
+            message "This will DELETE all AWS resources. Are you sure?"
+          }
+        }
+
         sh '''
         set -e
         cd infra
