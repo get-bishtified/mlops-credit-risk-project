@@ -9,8 +9,18 @@ TRAIN_IMAGE = os.getenv("TRAIN_IMAGE")
 RAW_BUCKET = os.getenv("RAW_BUCKET")
 MODEL_BUCKET = os.getenv("MODEL_BUCKET")
 
-if not all([ROLE_ARN, TRAIN_IMAGE, RAW_BUCKET, MODEL_BUCKET]):
-    raise RuntimeError("Missing required environment variables for training job")
+missing_vars = []
+if not ROLE_ARN:
+    missing_vars.append("SAGEMAKER_ROLE_ARN")
+if not TRAIN_IMAGE:
+    missing_vars.append("TRAIN_IMAGE")
+if not RAW_BUCKET:
+    missing_vars.append("RAW_BUCKET")
+if not MODEL_BUCKET:
+    missing_vars.append("MODEL_BUCKET")
+
+if missing_vars:
+    raise RuntimeError(f"Missing required environment variables for training job: {', '.join(missing_vars)}")
 
 sm = boto3.client("sagemaker", region_name=REGION)
 

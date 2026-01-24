@@ -61,6 +61,12 @@ pipeline {
         export MODEL_BUCKET=$(jq -r '.model_bucket.value' tf.json)
         export TRAIN_REPO=$(jq -r '.train_repo_url.value' tf.json)
 
+        # Check if required variables are set
+        if [ -z "$SAGEMAKER_ROLE_ARN" ]; then echo "ERROR: SAGEMAKER_ROLE_ARN is not set in Terraform outputs"; exit 1; fi
+        if [ -z "$RAW_BUCKET" ]; then echo "ERROR: RAW_BUCKET is not set in Terraform outputs"; exit 1; fi
+        if [ -z "$MODEL_BUCKET" ]; then echo "ERROR: MODEL_BUCKET is not set in Terraform outputs"; exit 1; fi
+        if [ -z "$TRAIN_REPO" ]; then echo "ERROR: TRAIN_REPO is not set in Terraform outputs"; exit 1; fi
+
         echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
         echo "ENDPOINT_NAME=$ENDPOINT_NAME"
         echo "MODEL_GROUP=$MODEL_GROUP"
