@@ -50,12 +50,23 @@ pipeline {
         set -e
         cd infra
 
-        export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
-        export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
-        export MODEL_GROUP=$(jq -r .model_package_group_name.value tf.json)
-        export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
-        export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
-        export TRAIN_REPO=$(jq -r .train_repo_url.value tf.json)
+        echo "===== Terraform Outputs ====="
+        cat tf.json
+        echo "============================="
+
+        export SAGEMAKER_ROLE_ARN=$(jq -r '.sagemaker_role_arn.value // empty' tf.json)
+        export ENDPOINT_NAME=$(jq -r '.endpoint_name.value' tf.json)
+        export MODEL_GROUP=$(jq -r '.model_package_group_name.value' tf.json)
+        export RAW_BUCKET=$(jq -r '.raw_bucket.value' tf.json)
+        export MODEL_BUCKET=$(jq -r '.model_bucket.value' tf.json)
+        export TRAIN_REPO=$(jq -r '.train_repo_url.value' tf.json)
+
+        echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
+        echo "ENDPOINT_NAME=$ENDPOINT_NAME"
+        echo "MODEL_GROUP=$MODEL_GROUP"
+        echo "RAW_BUCKET=$RAW_BUCKET"
+        echo "MODEL_BUCKET=$MODEL_BUCKET"
+        echo "TRAIN_REPO=$TRAIN_REPO"
 
         echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN" >  "$WORKSPACE/.env_infra"
         echo "ENDPOINT_NAME=$ENDPOINT_NAME"        >> "$WORKSPACE/.env_infra"
@@ -83,6 +94,12 @@ pipeline {
         sh '''
         set -e
         . "$WORKSPACE/.env_infra"
+
+        echo "ROLE=$SAGEMAKER_ROLE_ARN"
+        echo "TRAIN_IMAGE=$TRAIN_IMAGE"
+        echo "RAW_BUCKET=$RAW_BUCKET"
+        echo "MODEL_BUCKET=$MODEL_BUCKET"
+
         python3 pipelines/trigger_training.py
         '''
       }
