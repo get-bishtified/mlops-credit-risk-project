@@ -38,7 +38,7 @@ sm.create_training_job(
         "TrainingImage": TRAIN_IMAGE,
         "TrainingInputMode": "File",
         "TrainingImageConfig": {
-            "TrainingRepositoryAccessMode": "VPC"
+            "TrainingRepositoryAccessMode": "Vpc"
         }
     },
     InputDataConfig=[
