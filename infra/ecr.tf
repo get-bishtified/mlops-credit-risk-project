@@ -1,7 +1,7 @@
 resource "aws_ecr_repository" "train" {
-  name = "credit-ml-train"
+  name = "${var.project}-train"
 }
 
 resource "aws_ecr_repository" "infer" {
-  name = "credit-ml-infer"
+  name = "${var.project}-infer"
 }

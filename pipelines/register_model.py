@@ -1,20 +1,22 @@
 import os
 import boto3
 
-# Ensure required environment variables exist
-required = ["MODEL_ARTIFACTS", "MODEL_GROUP"]
+required = ["MODEL_ARTIFACTS", "MODEL_GROUP", "INFERENCE_IMAGE"]
 missing = [k for k in required if not os.getenv(k)]
 if missing:
     raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
 MODEL_ARTIFACTS = os.getenv("MODEL_ARTIFACTS")
 MODEL_GROUP = os.getenv("MODEL_GROUP")
+INFERENCE_IMAGE = os.getenv("INFERENCE_IMAGE")
 
 region = os.getenv("AWS_REGION", "ap-south-1")
 sm = boto3.client("sagemaker", region_name=region)
 
-print("Registering model from:", MODEL_ARTIFACTS)
-print("Model package group:", MODEL_GROUP)
+print("Registering model:")
+print("  Artifacts:", MODEL_ARTIFACTS)
+print("  Group:", MODEL_GROUP)
+print("  Inference Image:", INFERENCE_IMAGE)
 
 resp = sm.create_model_package(
     ModelPackageGroupName=MODEL_GROUP,
@@ -22,7 +24,7 @@ resp = sm.create_model_package(
     InferenceSpecification={
         "Containers": [
             {
-                "Image": os.getenv("INFERENCE_IMAGE", os.getenv("TRAIN_IMAGE")),
+                "Image": INFERENCE_IMAGE,
                 "ModelDataUrl": MODEL_ARTIFACTS,
             }
         ],

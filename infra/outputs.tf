@@ -10,8 +10,12 @@ output "model_bucket" {
   value = aws_s3_bucket.models.bucket
 }
 
-output "train_repo_url" {
-  value = aws_ecr_repository.train.repository_url
+output "train_image" {
+  value = "${aws_ecr_repository.train.repository_url}:latest"
+}
+
+output "infer_image" {
+  value = "${aws_ecr_repository.infer.repository_url}:latest"
 }
 
 output "training_subnets" {
