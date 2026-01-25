@@ -212,6 +212,31 @@ pipeline {
       }
     }
 
+    stage('Pre-Destroy Cleanup (ECR)') {
+      when { expression { params.ACTION == 'DESTROY' } }
+      steps {
+        sh '''
+        set -e
+
+        for repo in $(aws ecr describe-repositories \
+          --query "repositories[?starts_with(repositoryName, '${PROJECT}-')].repositoryName" \
+          --output text); do
+
+          image_ids=$(aws ecr list-images \
+            --repository-name "$repo" \
+            --query 'imageIds[*]' \
+            --output json)
+
+          if [ "$image_ids" != "[]" ]; then
+            aws ecr batch-delete-image \
+              --repository-name "$repo" \
+              --image-ids "$image_ids" || true
+          fi
+        done
+        '''
+      }
+    }
+
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {

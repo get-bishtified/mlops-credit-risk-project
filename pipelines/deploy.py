@@ -2,7 +2,6 @@ import boto3
 import os
 import time
 
-# Required environment variables
 required = [
     "AWS_REGION",
     "ENDPOINT_NAME",
@@ -22,6 +21,13 @@ ROLE_ARN = os.getenv("SAGEMAKER_ROLE_ARN")
 MODEL_BUCKET = os.getenv("MODEL_BUCKET")
 
 sm = boto3.client("sagemaker", region_name=REGION)
+
+print("Approving model package:", MODEL_PACKAGE_ARN)
+
+sm.update_model_package(
+    ModelPackageArn=MODEL_PACKAGE_ARN,
+    ModelApprovalStatus="Approved"
+)
 
 model_name = f"prod-model-{int(time.time())}"
 config_name = f"prod-config-{int(time.time())}"
@@ -64,4 +70,4 @@ sm.update_endpoint(
     EndpointConfigName=config_name
 )
 
-print("Deployment with monitoring enabled for endpoint:", ENDPOINT)
+print("Deployment completed for endpoint:", ENDPOINT)
