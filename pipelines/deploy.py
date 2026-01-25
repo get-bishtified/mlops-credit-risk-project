@@ -68,10 +68,10 @@ try:
         EndpointName=ENDPOINT,
         EndpointConfigName=config_name
     )
-    print("Endpoint updated.")
+    print("Endpoint update triggered.")
 except ClientError as e:
     if e.response["Error"]["Code"] == "ValidationException":
-        print("Endpoint not found. Creating new endpoint:", ENDPOINT)
+        print("Endpoint not found. Creating:", ENDPOINT)
         sm.create_endpoint(
             EndpointName=ENDPOINT,
             EndpointConfigName=config_name
@@ -80,4 +80,18 @@ except ClientError as e:
     else:
         raise
 
-print("Deployment flow completed for:", ENDPOINT)
+print("Waiting for endpoint to become InService...")
+
+while True:
+    desc = sm.describe_endpoint(EndpointName=ENDPOINT)
+    status = desc["EndpointStatus"]
+    print("Endpoint status:", status)
+
+    if status == "InService":
+        print("Endpoint is live:", ENDPOINT)
+        break
+
+    if status == "Failed":
+        raise RuntimeError("Endpoint deployment failed")
+
+    time.sleep(30)

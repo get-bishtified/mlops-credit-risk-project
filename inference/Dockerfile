@@ -1,5 +1,8 @@
-FROM python:3.9
-WORKDIR /app
-RUN pip install joblib numpy
-COPY predict.py .
-CMD ["python", "predict.py"]
+FROM python:3.9-slim
+
+RUN pip install sagemaker-inference joblib numpy
+
+COPY serve.py /opt/ml/code/serve.py
+ENV SAGEMAKER_PROGRAM serve.py
+
+ENTRYPOINT ["python", "-m", "sagemaker_inference"]
