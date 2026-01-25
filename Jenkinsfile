@@ -66,9 +66,10 @@ pipeline {
         export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
         export MODEL_GROUP=$(jq -r .model_group.value tf.json)
         export TRAIN_IMAGE=$(jq -r .train_image.value tf.json)
+        export INFERENCE_IMAGE=$(jq -r .infer_image.value tf.json)
         export TRAINING_SUBNETS=$(jq -r '.training_subnets.value | join(",")' tf.json)
         export TRAINING_SG=$(jq -r '.training_security_groups.value[0]' tf.json)
-
+        
         {
           echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
           echo "ENDPOINT_NAME=$ENDPOINT_NAME"
@@ -76,6 +77,7 @@ pipeline {
           echo "MODEL_BUCKET=$MODEL_BUCKET"
           echo "MODEL_GROUP=$MODEL_GROUP"
           echo "TRAIN_IMAGE=$TRAIN_IMAGE"
+          echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
           echo "TRAINING_SUBNETS=$TRAINING_SUBNETS"
           echo "TRAINING_SG=$TRAINING_SG"
         } > "$WORKSPACE/.env_infra"
@@ -111,6 +113,16 @@ pipeline {
         '''
       }
     }
+
+    stage('Build Inference Image') {
+      when { expression { params.ACTION == 'APPLY' } }
+      steps {
+        sh '''
+        set -e
+        docker build -t credit-infer "$WORKSPACE/inference"
+    '''
+  }
+}
 
     stage('Train Model') {
       when { expression { params.ACTION == 'APPLY' } }
@@ -150,7 +162,6 @@ pipeline {
       }
     }
 
-
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
@@ -165,6 +176,22 @@ pipeline {
         '''
       }
     }
+
+    stage('Pre-Destroy Cleanup (S3)') {
+      when { expression { params.ACTION == 'DESTROY' } }
+      steps {
+        sh '''
+        set -e
+
+        echo "Emptying S3 buckets created by this project..."
+
+        for b in $(aws s3 ls | awk '{print $3}' | grep "^${PROJECT}-"); do
+          echo "Cleaning bucket: $b"
+          aws s3 rm "s3://$b" --recursive || true
+          done
+        '''
+    }
+  
 
     stage('Pre-Destroy Cleanup (SageMaker)') {
       when { expression { params.ACTION == 'DESTROY' } }
