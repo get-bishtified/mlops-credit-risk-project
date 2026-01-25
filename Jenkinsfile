@@ -60,6 +60,8 @@ pipeline {
         export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
         export MODEL_GROUP=$(jq -r .model_group.value tf.json)
         export TRAIN_IMAGE=$(jq -r .train_image.value tf.json)
+        export TRAINING_SUBNETS=$(jq -r '.training_subnets.value | join(",")' tf.json)
+        export TRAINING_SG=$(jq -r '.training_security_groups.value[0]' tf.json)
 
         {
           echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
@@ -68,6 +70,8 @@ pipeline {
           echo "MODEL_BUCKET=$MODEL_BUCKET"
           echo "MODEL_GROUP=$MODEL_GROUP"
           echo "TRAIN_IMAGE=$TRAIN_IMAGE"
+          echo "TRAINING_SUBNETS=$TRAINING_SUBNETS"
+          echo "TRAINING_SG=$TRAINING_SG"
         } > ../.env_infra
         '''
       }
