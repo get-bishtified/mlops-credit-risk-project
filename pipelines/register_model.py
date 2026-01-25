@@ -3,9 +3,12 @@ import boto3
 from botocore.exceptions import ClientError
 
 required = ["MODEL_ARTIFACTS", "MODEL_GROUP", "INFERENCE_IMAGE"]
-missing = [k for k in required if not os.getenv(k)]
+missing = [k for k in required if not os.getenv(k) or os.getenv(k) in ("", "null", "None")]
+
 if missing:
-    raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+    raise RuntimeError(
+        f"Missing or invalid environment variables: {', '.join(missing)}"
+    )
 
 MODEL_ARTIFACTS = os.getenv("MODEL_ARTIFACTS")
 MODEL_GROUP = os.getenv("MODEL_GROUP")
@@ -16,24 +19,19 @@ sm = boto3.client("sagemaker", region_name=region)
 
 print("Using model package group:", MODEL_GROUP)
 
-# Ensure the Model Package Group exists
+# Ensure group exists
 try:
     sm.describe_model_package_group(ModelPackageGroupName=MODEL_GROUP)
     print("Model Package Group already exists.")
 except ClientError as e:
     if e.response["Error"]["Code"] == "ValidationException":
-        print("Model Package Group not found. Creating it...")
+        print("Model Package Group not found. Creating...")
         sm.create_model_package_group(
             ModelPackageGroupName=MODEL_GROUP,
-            ModelPackageGroupDescription="Credit risk models"
+            ModelPackageGroupDescription="Credit Risk MLOps Model Group"
         )
-        print("Model Package Group created.")
     else:
         raise
-
-print("Registering model:")
-print("  Artifacts:", MODEL_ARTIFACTS)
-print("  Inference Image:", INFERENCE_IMAGE)
 
 resp = sm.create_model_package(
     ModelPackageGroupName=MODEL_GROUP,

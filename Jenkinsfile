@@ -54,6 +54,9 @@ pipeline {
         set -e
         cd "$WORKSPACE/infra"
 
+        # Always regenerate – no stale values
+        rm -f "$WORKSPACE/.env_infra"
+
         export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
         export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
         export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
@@ -217,7 +220,6 @@ pipeline {
       steps {
         sh '''
         set -e
-
         for repo in $(aws ecr describe-repositories \
           --query "repositories[?starts_with(repositoryName, '${PROJECT}-')].repositoryName" \
           --output text); do
