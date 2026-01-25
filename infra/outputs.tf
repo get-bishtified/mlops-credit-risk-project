@@ -15,7 +15,10 @@ output "train_repo_url" {
 }
 
 output "training_subnets" {
-  value = aws_subnet.private[*].id
+  value = [
+    aws_subnet.private_a.id,
+    aws_subnet.private_b.id
+  ]
 }
 
 output "training_security_groups" {
