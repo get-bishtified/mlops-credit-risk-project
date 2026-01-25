@@ -31,14 +31,6 @@ sm = boto3.client("sagemaker", region_name=region)
 
 job_name = f"credit-mlops-train-{int(time.time())}"
 
-print(f"Starting training job: {job_name}")
-print("ROLE_ARN:", ROLE_ARN)
-print("TRAIN_IMAGE:", TRAIN_IMAGE)
-print("RAW_BUCKET:", RAW_BUCKET)
-print("MODEL_BUCKET:", MODEL_BUCKET)
-print("SUBNETS:", subnet_ids)
-print("SECURITY_GROUP:", SG)
-
 sm.create_training_job(
     TrainingJobName=job_name,
     RoleArn=ROLE_ARN,
@@ -82,5 +74,3 @@ sm.create_training_job(
 with open(".env_artifacts", "w") as f:
     f.write(f"TRAINING_JOB_NAME={job_name}\n")
     f.write(f"MODEL_ARTIFACTS=s3://{MODEL_BUCKET}/artifacts/\n")
-
-print("Training job submitted successfully.")

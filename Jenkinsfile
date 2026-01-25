@@ -20,6 +20,12 @@ pipeline {
 
   stages {
 
+    stage('Clean Workspace') {
+      steps {
+        deleteDir()
+      }
+    }
+
     stage('Checkout') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
@@ -124,7 +130,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && source .env_artifacts
+        [ -f .env_artifacts ] && . .env_artifacts
         python3 pipelines/evaluate.py
         '''
       }
@@ -135,7 +141,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && source .env_artifacts
+        [ -f .env_artifacts ] && . .env_artifacts
         python3 pipelines/register_model.py
         '''
       }
@@ -149,7 +155,7 @@ pipeline {
         set -e
         set -a
         . "$WORKSPACE/.env_infra"
-        [ -f .env_model ] && source .env_model
+        [ -f .env_model ] && . .env_model
         set +a
         python3 pipelines/deploy.py
         '''
