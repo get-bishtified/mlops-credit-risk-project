@@ -1,30 +1,39 @@
-import boto3
 import os
+import boto3
 
-REGION = os.getenv("AWS_REGION", "ap-south-1")
-GROUP = os.getenv("MODEL_GROUP")
-INFER_IMAGE = os.getenv("INFER_IMAGE")
+# Ensure required environment variables exist
+required = ["MODEL_ARTIFACTS", "MODEL_GROUP"]
+missing = [k for k in required if not os.getenv(k)]
+if missing:
+    raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
 MODEL_ARTIFACTS = os.getenv("MODEL_ARTIFACTS")
+MODEL_GROUP = os.getenv("MODEL_GROUP")
 
-sm = boto3.client("sagemaker", region_name=REGION)
+region = os.getenv("AWS_REGION", "ap-south-1")
+sm = boto3.client("sagemaker", region_name=region)
+
+print("Registering model from:", MODEL_ARTIFACTS)
+print("Model package group:", MODEL_GROUP)
 
 resp = sm.create_model_package(
-    ModelPackageGroupName=GROUP,
-    ModelPackageDescription="Credit Risk Model",
+    ModelPackageGroupName=MODEL_GROUP,
+    ModelPackageDescription="Credit risk model",
     InferenceSpecification={
-        "Containers": [{
-            "Image": INFER_IMAGE,
-            "ModelDataUrl": MODEL_ARTIFACTS,
-        }],
-        "SupportedContentTypes": ["application/json"],
-        "SupportedResponseMIMETypes": ["application/json"],
+        "Containers": [
+            {
+                "Image": os.getenv("INFERENCE_IMAGE", os.getenv("TRAIN_IMAGE")),
+                "ModelDataUrl": MODEL_ARTIFACTS,
+            }
+        ],
+        "SupportedContentTypes": ["text/csv"],
+        "SupportedResponseMIMETypes": ["text/csv"],
     },
-    ApprovalStatus="PendingManualApproval",
+    ModelApprovalStatus="PendingManualApproval",
 )
 
-print("Registered model package:", resp["ModelPackageArn"])
+model_package_arn = resp["ModelPackageArn"]
+print("Created model package:", model_package_arn)
+
 with open(".env_model", "w") as f:
-    f.write(f"MODEL_PACKAGE_ARN={resp['ModelPackageArn']}
-")
-```python
-print("Register model in SageMaker Registry (placeholder)")
+    f.write(f"MODEL_PACKAGE_ARN={model_package_arn}\n")
