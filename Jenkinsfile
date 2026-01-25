@@ -27,7 +27,6 @@ pipeline {
     }
 
     stage('Checkout') {
-      when { expression { params.ACTION == 'APPLY' } }
       steps {
         checkout scm
       }
@@ -45,7 +44,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        cd infra
+        cd "$WORKSPACE/infra"
         terraform init
         terraform apply -auto-approve
         terraform output -json > tf.json
@@ -58,7 +57,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        cd infra
+        cd "$WORKSPACE/infra"
 
         export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
         export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
@@ -78,7 +77,7 @@ pipeline {
           echo "TRAIN_IMAGE=$TRAIN_IMAGE"
           echo "TRAINING_SUBNETS=$TRAINING_SUBNETS"
           echo "TRAINING_SG=$TRAINING_SG"
-        } > ../.env_infra
+        } > "$WORKSPACE/.env_infra"
         '''
       }
     }
@@ -94,7 +93,7 @@ pipeline {
 
         if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
           echo "Uploading sample training data..."
-          aws s3 cp data/sample.csv "s3://$RAW_BUCKET/train/data.csv"
+          aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
         else
           echo "Training data already present."
         fi
@@ -107,7 +106,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        docker build -t credit-train training/
+        docker build -t credit-train "$WORKSPACE/training"
         '''
       }
     }
@@ -120,7 +119,7 @@ pipeline {
         set -a
         . "$WORKSPACE/.env_infra"
         set +a
-        python3 pipelines/trigger_training.py
+        python3 "$WORKSPACE/pipelines/trigger_training.py"
         '''
       }
     }
@@ -130,8 +129,8 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && . .env_artifacts
-        python3 pipelines/evaluate.py
+        [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
+        python3 "$WORKSPACE/pipelines/evaluate.py"
         '''
       }
     }
@@ -141,8 +140,8 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f .env_artifacts ] && . .env_artifacts
-        python3 pipelines/register_model.py
+        [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
+        python3 "$WORKSPACE/pipelines/register_model.py"
         '''
       }
     }
@@ -155,9 +154,9 @@ pipeline {
         set -e
         set -a
         . "$WORKSPACE/.env_infra"
-        [ -f .env_model ] && . .env_model
+        [ -f "$WORKSPACE/.env_model" ] && . "$WORKSPACE/.env_model"
         set +a
-        python3 pipelines/deploy.py
+        python3 "$WORKSPACE/pipelines/deploy.py"
         '''
       }
     }
@@ -168,7 +167,7 @@ pipeline {
         input message: 'This will DELETE all AWS resources. Are you sure?'
         sh '''
         set -e
-        cd infra
+        cd "$WORKSPACE/infra"
         terraform init
         terraform destroy -auto-approve
         '''
