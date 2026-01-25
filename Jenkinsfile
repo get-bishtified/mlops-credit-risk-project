@@ -22,22 +22,16 @@ pipeline {
 
     stage('Clean Workspace') {
       when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        deleteDir()
-      }
+      steps { deleteDir() }
     }
 
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     stage('Tests') {
       when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh 'python3 -m pytest tests/'
-      }
+      steps { sh 'python3 -m pytest tests/' }
     }
 
     stage('Terraform Apply') {
@@ -91,31 +85,46 @@ pipeline {
         set +a
 
         if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
-          echo "Uploading sample training data..."
           aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
-        else
-          echo "Training data already present."
         fi
         '''
       }
     }
 
-    stage('Build Training Image') {
+    stage('Build & Push Training Image') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
         sh '''
         set -e
+        set -a
+        . "$WORKSPACE/.env_infra"
+        set +a
+
+        aws ecr get-login-password --region "$AWS_REGION" \
+          | docker login --username AWS --password-stdin "$(echo $TRAIN_IMAGE | cut -d/ -f1)"
+
         docker build -t credit-train "$WORKSPACE/training"
+        docker tag credit-train "$TRAIN_IMAGE"
+        docker push "$TRAIN_IMAGE"
         '''
       }
     }
 
-    stage('Build Inference Image') {
+    stage('Build & Push Inference Image') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
         sh '''
         set -e
+        set -a
+        . "$WORKSPACE/.env_infra"
+        set +a
+
+        aws ecr get-login-password --region "$AWS_REGION" \
+          | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
+
         docker build -t credit-infer "$WORKSPACE/inference"
+        docker tag credit-infer "$INFERENCE_IMAGE"
+        docker push "$INFERENCE_IMAGE"
         '''
       }
     }
@@ -178,20 +187,14 @@ pipeline {
       steps {
         sh '''
         set -e
-
-        echo "Deleting SageMaker endpoints..."
         for ep in $(aws sagemaker list-endpoints --query 'Endpoints[].EndpointName' --output text); do
-          echo "Deleting endpoint $ep"
           aws sagemaker delete-endpoint --endpoint-name "$ep" || true
         done
 
-        echo "Stopping running training jobs..."
         for job in $(aws sagemaker list-training-jobs --status-equals InProgress --query 'TrainingJobSummaries[].TrainingJobName' --output text); do
-          echo "Stopping training job $job"
           aws sagemaker stop-training-job --training-job-name "$job" || true
         done
 
-        echo "Waiting for SageMaker to release ENIs..."
         sleep 60
         '''
       }
@@ -202,11 +205,7 @@ pipeline {
       steps {
         sh '''
         set -e
-
-        echo "Emptying S3 buckets created by this project..."
-
         for b in $(aws s3 ls | awk '{print $3}' | grep "^${PROJECT}-"); do
-          echo "Cleaning bucket: $b"
           aws s3 rm "s3://$b" --recursive || true
         done
         '''
@@ -228,11 +227,7 @@ pipeline {
   }
 
   post {
-    failure {
-      echo "Pipeline failed. Production endpoint remains unchanged."
-    }
-    success {
-      echo "Action ${params.ACTION} completed successfully."
-    }
+    failure { echo "Pipeline failed." }
+    success { echo "Action ${params.ACTION} completed successfully." }
   }
 }
