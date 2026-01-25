@@ -140,12 +140,16 @@ pipeline {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
         sh '''
-        set -e
-        [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
-        python3 "$WORKSPACE/pipelines/register_model.py"
-        '''
+          set -e
+          set -a
+          . "$WORKSPACE/.env_infra"
+          [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
+          set +a
+          python3 "$WORKSPACE/pipelines/register_model.py"
+          '''
       }
     }
+
 
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
