@@ -21,6 +21,7 @@ pipeline {
   stages {
 
     stage('Clean Workspace') {
+      when { expression { params.ACTION == 'APPLY' } }
       steps {
         deleteDir()
       }
