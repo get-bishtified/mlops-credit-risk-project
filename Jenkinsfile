@@ -162,6 +162,30 @@ pipeline {
       }
     }
 
+    stage('Pre-Destroy Cleanup (SageMaker)') {
+      when { expression { params.ACTION == 'DESTROY' } }
+      steps {
+        sh '''
+        set -e
+
+        echo "Deleting SageMaker endpoints..."
+        for ep in $(aws sagemaker list-endpoints --query 'Endpoints[].EndpointName' --output text); do
+          echo "Deleting endpoint $ep"
+          aws sagemaker delete-endpoint --endpoint-name "$ep" || true
+        done
+
+        echo "Stopping running training jobs..."
+        for job in $(aws sagemaker list-training-jobs --status-equals InProgress --query 'TrainingJobSummaries[].TrainingJobName' --output text); do
+          echo "Stopping training job $job"
+          aws sagemaker stop-training-job --training-job-name "$job" || true
+        done
+
+        echo "Waiting for SageMaker to release ENIs..."
+        sleep 60
+        '''
+      }
+    }
+
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
