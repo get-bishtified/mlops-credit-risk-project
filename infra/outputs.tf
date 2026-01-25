@@ -29,5 +29,9 @@ output "training_security_groups" {
   value = [aws_security_group.sagemaker.id]
 }
 
+output "model_group" {
+  value = "${var.project}-credit-risk"
+}
+
 
 
