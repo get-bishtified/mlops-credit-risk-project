@@ -31,14 +31,15 @@ print("Using TRAIN_IMAGE:", TRAIN_IMAGE)
 print("Using RAW_BUCKET:", RAW_BUCKET)
 print("Using MODEL_BUCKET:", MODEL_BUCKET)
 
-response = sm.create_training_job(
+sm.create_training_job(
     TrainingJobName=job_name,
     RoleArn=ROLE_ARN,
     AlgorithmSpecification={
         "TrainingImage": TRAIN_IMAGE,
         "TrainingInputMode": "File",
-        # Backward-compatible way for private ECR images
-        "TrainingRepositoryAccessMode": "VPC"
+        "TrainingImageConfig": {
+            "TrainingRepositoryAccessMode": "VPC"
+        }
     },
     InputDataConfig=[
         {
