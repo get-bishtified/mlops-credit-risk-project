@@ -26,7 +26,7 @@ sm = boto3.client("sagemaker", region_name=REGION)
 job_name = f"credit-mlops-train-{int(time.time())}"
 print("Starting training job:", job_name)
 
-response = sm.create_training_job(
+sm.create_training_job(
     TrainingJobName=job_name,
     RoleArn=ROLE_ARN,
     AlgorithmSpecification={
@@ -59,8 +59,22 @@ response = sm.create_training_job(
     },
 )
 
-print("Training job submitted successfully:", response["TrainingJobArn"])
+print("Training job submitted. Waiting for completion...")
 
-model_artifacts = f"s3://{MODEL_BUCKET}/artifacts/{job_name}/output/model.tar.gz"
+while True:
+    desc = sm.describe_training_job(TrainingJobName=job_name)
+    status = desc["TrainingJobStatus"]
+    print("Training status:", status)
+
+    if status == "Completed":
+        break
+    if status in ("Failed", "Stopped"):
+        raise RuntimeError(f"Training job ended with status: {status}")
+
+    time.sleep(60)
+
+artifact_path = desc["ModelArtifacts"]["S3ModelArtifacts"]
+print("Model artifact ready at:", artifact_path)
+
 with open(".env_artifacts", "w") as f:
-    f.write(f"MODEL_ARTIFACTS={model_artifacts}\n")
+    f.write(f"MODEL_ARTIFACTS={artifact_path}\n")
