@@ -1,6 +1,7 @@
 import boto3
 import os
 import time
+from botocore.exceptions import ClientError
 
 required = [
     "AWS_REGION",
@@ -23,7 +24,6 @@ MODEL_BUCKET = os.getenv("MODEL_BUCKET")
 sm = boto3.client("sagemaker", region_name=REGION)
 
 print("Approving model package:", MODEL_PACKAGE_ARN)
-
 sm.update_model_package(
     ModelPackageArn=MODEL_PACKAGE_ARN,
     ModelApprovalStatus="Approved"
@@ -33,7 +33,6 @@ model_name = f"prod-model-{int(time.time())}"
 config_name = f"prod-config-{int(time.time())}"
 
 print("Creating model:", model_name)
-
 sm.create_model(
     ModelName=model_name,
     ExecutionRoleArn=ROLE_ARN,
@@ -43,7 +42,6 @@ sm.create_model(
 )
 
 print("Creating endpoint config:", config_name)
-
 sm.create_endpoint_config(
     EndpointConfigName=config_name,
     ProductionVariants=[{
@@ -63,11 +61,23 @@ sm.create_endpoint_config(
     },
 )
 
-print("Updating endpoint:", ENDPOINT)
+print("Deploying to endpoint:", ENDPOINT)
 
-sm.update_endpoint(
-    EndpointName=ENDPOINT,
-    EndpointConfigName=config_name
-)
+try:
+    sm.update_endpoint(
+        EndpointName=ENDPOINT,
+        EndpointConfigName=config_name
+    )
+    print("Endpoint updated.")
+except ClientError as e:
+    if e.response["Error"]["Code"] == "ValidationException":
+        print("Endpoint not found. Creating new endpoint:", ENDPOINT)
+        sm.create_endpoint(
+            EndpointName=ENDPOINT,
+            EndpointConfigName=config_name
+        )
+        print("Endpoint creation triggered.")
+    else:
+        raise
 
-print("Deployment completed for endpoint:", ENDPOINT)
+print("Deployment flow completed for:", ENDPOINT)
