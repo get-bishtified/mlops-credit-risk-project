@@ -1,13 +1,10 @@
-FROM python:3.9-slim
+FROM public.ecr.aws/sagemaker/sagemaker-inference:latest
 
-# Install SageMaker inference runtime and deps
-RUN pip install --no-cache-dir sagemaker-inference joblib numpy
+# Install your ML dependencies
+RUN pip install --no-cache-dir joblib numpy
 
-# Copy your SageMaker hook script
+# Copy your hook script
 COPY serve.py /opt/ml/code/serve.py
 
-# Tell SageMaker which script to run
+# Tell SageMaker which program to load
 ENV SAGEMAKER_PROGRAM serve.py
-
-# Correct SageMaker entrypoint
-ENTRYPOINT ["python", "-m", "sagemaker_inference.server"]
