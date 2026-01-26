@@ -5,16 +5,18 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 import joblib
+import numpy as np
 
 def main():
     parser = argparse.ArgumentParser()
 
-    # SageMaker passes the channel name as a positional arg ("train")
+    # SageMaker passes the channel name as a positional arg (e.g., "train")
     parser.add_argument("channel", nargs="?", default="train")
 
-    # Optional override (not required for SageMaker)
+    # Optional override for local runs
     parser.add_argument("--data-dir", type=str)
 
+    # Allow SageMaker's extra args without failing
     args, _ = parser.parse_known_args()
 
     # SageMaker mounts data at /opt/ml/input/data/<channel>/
@@ -26,7 +28,7 @@ def main():
 
     df = pd.read_csv(data_path)
 
-    # All columns except last = features, last = label
+    # Assumption: last column is target, others are features
     X = df.iloc[:, :-1]
     y = df.iloc[:, -1]
 
@@ -38,8 +40,13 @@ def main():
     model.fit(X_train, y_train)
 
     preds = model.predict_proba(X_val)[:, 1]
-    auc = roc_auc_score(y_val, preds)
-    print("Validation AUC:", auc)
+
+    # Guard AUC for small/skewed demo data
+    if len(np.unique(y_val)) > 1:
+        auc = roc_auc_score(y_val, preds)
+        print("Validation AUC:", auc)
+    else:
+        print("WARNING: Only one class present in validation set. AUC not defined.")
 
     model_dir = "/opt/ml/model"
     os.makedirs(model_dir, exist_ok=True)
