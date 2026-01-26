@@ -185,6 +185,17 @@ pipeline {
       }
     }
 
+    stage('Post-Deploy Health Check') {
+      when { expression { params.ACTION == 'APPLY' } }
+      steps {
+        sh '''
+        set -e
+        source .env_infra
+        python3 pipelines/check_drift.py
+        '''
+      }
+    }
+
     stage('Pre-Destroy Cleanup (SageMaker)') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
