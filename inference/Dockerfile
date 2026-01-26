@@ -9,5 +9,5 @@ COPY serve.py /opt/ml/code/serve.py
 # Tell SageMaker which script to run
 ENV SAGEMAKER_PROGRAM serve.py
 
-# Correct entrypoint for SageMaker inference
-ENTRYPOINT ["python", "-m", "sagemaker_inference.serve"]
+# Correct SageMaker entrypoint
+ENTRYPOINT ["python", "-m", "sagemaker_inference.server"]
