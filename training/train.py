@@ -8,17 +8,25 @@ import joblib
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", type=str, default="/opt/ml/input/data/train")
-    args = parser.parse_args()
 
-    data_path = os.path.join(args.data_dir, "data.csv")
+    # SageMaker passes the channel name as a positional arg ("train")
+    parser.add_argument("channel", nargs="?", default="train")
+
+    # Optional override (not required for SageMaker)
+    parser.add_argument("--data-dir", type=str)
+
+    args, _ = parser.parse_known_args()
+
+    # SageMaker mounts data at /opt/ml/input/data/<channel>/
+    data_dir = args.data_dir or f"/opt/ml/input/data/{args.channel}"
+    data_path = os.path.join(data_dir, "data.csv")
+
     if not os.path.exists(data_path):
         raise RuntimeError(f"Training data not found at {data_path}")
 
     df = pd.read_csv(data_path)
 
-    # Example schema assumption:
-    # last column = target
+    # All columns except last = features, last = label
     X = df.iloc[:, :-1]
     y = df.iloc[:, -1]
 
