@@ -54,7 +54,6 @@ pipeline {
         set -e
         cd "$WORKSPACE/infra"
 
-        # Always regenerate – no stale values
         rm -f "$WORKSPACE/.env_infra"
 
         export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
@@ -62,8 +61,11 @@ pipeline {
         export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
         export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
         export MODEL_GROUP=$(jq -r .model_group.value tf.json)
-        export TRAIN_IMAGE=$(jq -r .train_image.value tf.json)
-        export INFERENCE_IMAGE=$(jq -r .infer_image.value tf.json)
+
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+        export TRAIN_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-train:latest"
+        export INFERENCE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-infer:latest"
 
         {
           echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
@@ -102,8 +104,6 @@ pipeline {
             returnStdout: true
           ).trim()
 
-      // Base image is mirrored once into your own ECR:
-      // <account>.dkr.ecr.<region>.amazonaws.com/mlops-base/sklearn:1.2
           env.SM_BASE_IMAGE = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/mlops-base/sklearn:1.2"
         }
 
@@ -138,18 +138,21 @@ pipeline {
       steps {
         sh '''
           set -e
+          set -a
+          . "$WORKSPACE/.env_infra"
+          set +a
+
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
 
           docker build \
             --build-arg SM_BASE_IMAGE=$SM_BASE_IMAGE \
-            -t credit-mlops-infer inference/
+            -t credit-mlops-infer "$WORKSPACE/inference"
 
-          docker tag credit-mlops-infer \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/credit-mlops-infer:latest
-
-          docker push \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/credit-mlops-infer:latest
+          docker tag credit-mlops-infer "$INFERENCE_IMAGE"
+          docker push "$INFERENCE_IMAGE"
         '''
-     }
+      }
     }
 
     stage('Train Model') {
@@ -213,7 +216,6 @@ pipeline {
         set -a
         . "$WORKSPACE/.env_infra"
         set +a
-        
         python3 "$WORKSPACE/pipelines/check_drift.py"
         '''
       }
