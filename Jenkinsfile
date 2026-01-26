@@ -190,8 +190,11 @@ pipeline {
       steps {
         sh '''
         set -e
-        source .env_infra
-        python3 pipelines/check_drift.py
+        set -a
+        . "$WORKSPACE/.env_infra"
+        set +a
+        
+        python3 "$WORKSPACE/pipelines/check_drift.py"
         '''
       }
     }
