@@ -2,11 +2,7 @@ pipeline {
   agent any
 
   parameters {
-    choice(
-      name: 'ACTION',
-      choices: ['APPLY', 'DESTROY'],
-      description: 'Provision or destroy all infrastructure'
-    )
+    choice(name: 'ACTION', choices: ['APPLY', 'DESTROY'], description: 'Provision or destroy all infrastructure')
   }
 
   environment {
@@ -20,18 +16,17 @@ pipeline {
 
   stages {
 
-    stage('Clean Workspace') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps { deleteDir() }
-    }
-
     stage('Checkout') {
+      when { expression { params.ACTION == 'APPLY' } }
       steps { checkout scm }
     }
 
     stage('Tests') {
       when { expression { params.ACTION == 'APPLY' } }
-      steps { sh 'python3 -m pytest tests/' }
+      steps {
+        sh 'python3 -m pip install --user pytest'
+        sh 'python3 -m pytest tests/'
+      }
     }
 
     stage('Terraform Apply') {
@@ -39,7 +34,7 @@ pipeline {
       steps {
         sh '''
         set -e
-        cd "$WORKSPACE/infra"
+        cd infra
         terraform init
         terraform apply -auto-approve
         terraform output -json > tf.json
@@ -52,82 +47,14 @@ pipeline {
       steps {
         sh '''
         set -e
-        cd "$WORKSPACE/infra"
+        cd infra
 
-        # Always regenerate – no stale values
-        rm -f "$WORKSPACE/.env_infra"
-
-        export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
-        export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
-        export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
-        export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
-        export MODEL_GROUP=$(jq -r .model_group.value tf.json)
-        export TRAIN_IMAGE=$(jq -r .train_image.value tf.json)
-        export INFERENCE_IMAGE=$(jq -r .infer_image.value tf.json)
-
-        {
-          echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
-          echo "ENDPOINT_NAME=$ENDPOINT_NAME"
-          echo "RAW_BUCKET=$RAW_BUCKET"
-          echo "MODEL_BUCKET=$MODEL_BUCKET"
-          echo "MODEL_GROUP=$MODEL_GROUP"
-          echo "TRAIN_IMAGE=$TRAIN_IMAGE"
-          echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
-        } > "$WORKSPACE/.env_infra"
-        '''
-      }
-    }
-
-    stage('Ensure Training Data') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-
-        if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
-          aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
-        fi
-        '''
-      }
-    }
-
-    stage('Build & Push Training Image') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-
-        aws ecr get-login-password --region "$AWS_REGION" \
-          | docker login --username AWS --password-stdin "$(echo $TRAIN_IMAGE | cut -d/ -f1)"
-
-        docker build -t credit-train "$WORKSPACE/training"
-        docker tag credit-train "$TRAIN_IMAGE"
-        docker push "$TRAIN_IMAGE"
-        '''
-      }
-    }
-
-    stage('Build & Push Inference Image') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-
-        aws ecr get-login-password --region "$AWS_REGION" \
-          | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
-
-        docker build -t credit-infer "$WORKSPACE/inference"
-        docker tag credit-infer "$INFERENCE_IMAGE"
-        docker push "$INFERENCE_IMAGE"
+        echo "SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)" > ../.env_infra
+        echo "ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)" >> ../.env_infra
+        echo "MODEL_GROUP=$(jq -r .model_group.value tf.json)" >> ../.env_infra
+        echo "RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)" >> ../.env_infra
+        echo "MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)" >> ../.env_infra
+        echo "TRAIN_IMAGE=$(jq -r .train_image.value tf.json)" >> ../.env_infra
         '''
       }
     }
@@ -137,10 +64,8 @@ pipeline {
       steps {
         sh '''
         set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-        python3 "$WORKSPACE/pipelines/trigger_training.py"
+        source .env_infra
+        python3 pipelines/trigger_training.py
         '''
       }
     }
@@ -150,8 +75,8 @@ pipeline {
       steps {
         sh '''
         set -e
-        [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
-        python3 "$WORKSPACE/pipelines/evaluate.py"
+        source .env_artifacts
+        python3 pipelines/evaluate.py
         '''
       }
     }
@@ -161,79 +86,57 @@ pipeline {
       steps {
         sh '''
         set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        [ -f "$WORKSPACE/.env_artifacts" ] && . "$WORKSPACE/.env_artifacts"
-        set +a
-        python3 "$WORKSPACE/pipelines/register_model.py"
+        source .env_artifacts
+        python3 pipelines/register_model.py
         '''
       }
     }
 
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
+      input {
+        message "Approve model for production deployment?"
+        ok "Deploy"
+      }
       steps {
-        input message: 'Approve model for production?'
         sh '''
         set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        [ -f "$WORKSPACE/.env_model" ] && . "$WORKSPACE/.env_model"
-        set +a
-        python3 "$WORKSPACE/pipelines/deploy.py"
+        source .env_infra
+        source .env_model
+        python3 pipelines/deploy.py
         '''
       }
     }
 
-    stage('Pre-Destroy Cleanup (SageMaker)') {
+    /* ---------------- DESTROY FLOW ---------------- */
+
+    stage('Pre-Destroy Cleanup (SageMaker & S3)') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
         sh '''
         set -e
-        for ep in $(aws sagemaker list-endpoints --query 'Endpoints[].EndpointName' --output text); do
-          aws sagemaker delete-endpoint --endpoint-name "$ep" || true
+
+        echo "Cleaning SageMaker training jobs..."
+        for j in $(aws sagemaker list-training-jobs --region ${AWS_REGION} \
+            --query "TrainingJobSummaries[?starts_with(TrainingJobName, '${PROJECT}')].TrainingJobName" \
+            --output text); do
+          echo "Stopping $j"
+          aws sagemaker stop-training-job --training-job-name "$j" --region ${AWS_REGION} || true
         done
 
-        for job in $(aws sagemaker list-training-jobs --status-equals InProgress --query 'TrainingJobSummaries[].TrainingJobName' --output text); do
-          aws sagemaker stop-training-job --training-job-name "$job" || true
+        echo "Cleaning model packages..."
+        for p in $(aws sagemaker list-model-packages --region ${AWS_REGION} \
+            --model-package-group-name ${PROJECT}-credit-risk \
+            --query "ModelPackageSummaryList[].ModelPackageArn" \
+            --output text 2>/dev/null); do
+          echo "Deleting $p"
+          aws sagemaker delete-model-package --model-package-arn "$p" --region ${AWS_REGION} || true
         done
 
-        sleep 60
-        '''
-      }
-    }
-
-    stage('Pre-Destroy Cleanup (S3)') {
-      when { expression { params.ACTION == 'DESTROY' } }
-      steps {
-        sh '''
-        set -e
+        echo "Emptying S3 buckets created by this project..."
         for b in $(aws s3 ls | awk '{print $3}' | grep "^${PROJECT}-"); do
+          echo "Cleaning bucket: $b"
           aws s3 rm "s3://$b" --recursive || true
-        done
-        '''
-      }
-    }
-
-    stage('Pre-Destroy Cleanup (ECR)') {
-      when { expression { params.ACTION == 'DESTROY' } }
-      steps {
-        sh '''
-        set -e
-        for repo in $(aws ecr describe-repositories \
-          --query "repositories[?starts_with(repositoryName, '${PROJECT}-')].repositoryName" \
-          --output text); do
-
-          image_ids=$(aws ecr list-images \
-            --repository-name "$repo" \
-            --query 'imageIds[*]' \
-            --output json)
-
-          if [ "$image_ids" != "[]" ]; then
-            aws ecr batch-delete-image \
-              --repository-name "$repo" \
-              --image-ids "$image_ids" || true
-          fi
         done
         '''
       }
@@ -241,11 +144,14 @@ pipeline {
 
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
+      input {
+        message "This will DELETE all AWS resources. Continue?"
+        ok "Destroy"
+      }
       steps {
-        input message: 'This will DELETE all AWS resources. Are you sure?'
         sh '''
         set -e
-        cd "$WORKSPACE/infra"
+        cd infra
         terraform init
         terraform destroy -auto-approve
         '''
@@ -254,7 +160,11 @@ pipeline {
   }
 
   post {
-    failure { echo "Pipeline failed." }
-    success { echo "Action ${params.ACTION} completed successfully." }
+    failure {
+      echo "Pipeline failed. No partial production rollout occurred."
+    }
+    success {
+      echo "Action ${params.ACTION} completed successfully."
+    }
   }
 }
