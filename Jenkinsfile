@@ -104,12 +104,21 @@ pipeline {
     stage('Deploy (Manual Approval)') {
       when { expression { params.ACTION == 'APPLY' } }
 
-      input {
-        message "Approve model for production deployment?"
-        ok "Deploy"
-      }
-
       steps {
+        script {
+          def decision = input(
+            message: "Approve model for production deployment?",
+            ok: "Deploy",
+            parameters: [
+              choice(name: 'DECISION', choices: ['Deploy', 'Abort'], description: '')
+            ]
+          )
+
+          if (decision == 'Abort') {
+            error("Deployment aborted by user")
+          }
+        }
+
         sh '''
           set -e
           source .env_infra
@@ -153,12 +162,14 @@ pipeline {
     stage('Terraform Destroy') {
       when { expression { params.ACTION == 'DESTROY' } }
 
-      input {
-        message "This will DELETE all AWS resources. Continue?"
-        ok "Destroy"
-      }
-
       steps {
+        script {
+          input(
+            message: "This will DELETE all AWS resources. Continue?",
+            ok: "Destroy"
+          )
+        }
+
         sh '''
           set -e
           cd infra
