@@ -1,10 +1,7 @@
-ARG SM_BASE_IMAGE
-FROM ${SM_BASE_IMAGE}
+FROM python:3.8-slim
 
-WORKDIR /opt/ml/code
+RUN pip install --no-cache-dir flask gunicorn joblib numpy pandas scikit-learn
 
-COPY serve.py /opt/ml/code/serve.py
+COPY app.py /opt/ml/code/app.py
 
-ENV SAGEMAKER_PROGRAM serve.py
-
-ENTRYPOINT ["python3", "-m", "sagemaker_inference.server"]
+ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
