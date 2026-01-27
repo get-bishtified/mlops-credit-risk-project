@@ -14,11 +14,18 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir \
-    git+https://github.com/aws/sagemaker-inference-toolkit.git \
+RUN pip install --no-cache-dir \
+    flask \
+    gunicorn \
+    gevent \
     numpy \
     pandas \
     scikit-learn
 
+RUN pip install --no-cache-dir \
+    git+https://github.com/aws/sagemaker-inference-toolkit.git
+
+RUN pip list | grep sagemaker
+
 # Verify sagemaker-inference is installed
-RUN python3 -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
+RUN python -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
