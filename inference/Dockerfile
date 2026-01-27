@@ -1,9 +1,10 @@
-ARG SM_BASE_IMAGE
-FROM ${SM_BASE_IMAGE}
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
 
-RUN pip install --no-cache-dir joblib
+WORKDIR /opt/ml/code
 
 COPY serve.py /opt/ml/code/serve.py
+
 ENV SAGEMAKER_PROGRAM serve.py
 
-ENTRYPOINT ["python", "-m", "sagemaker_inference.server"]
+ENTRYPOINT ["python3", "-m", "sagemaker_inference.server"]
