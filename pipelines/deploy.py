@@ -92,6 +92,8 @@ while True:
         break
 
     if status == "Failed":
+        failure_reason = desc.get("FailureReason", "Unknown")
+        print("Endpoint deployment failed. Reason:", failure_reason)
         raise RuntimeError("Endpoint deployment failed")
 
     time.sleep(30)
