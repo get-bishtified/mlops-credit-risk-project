@@ -1,6 +1,6 @@
 FROM python:3.8
 
-RUN yum update && yum install -y \
+RUN apt-get update && apt-get install -y \
     libgomp1 \
     libglib2.0-0 \
     libgthread-2.0-0 \
