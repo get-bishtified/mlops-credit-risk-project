@@ -129,6 +129,9 @@ pipeline {
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
 
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin 763104351884.dkr.ecr.${AWS_REGION}.amazonaws.com
+
           docker build --build-arg SM_BASE_IMAGE=$SM_BASE_IMAGE -t credit-mlops-infer "$WORKSPACE/inference"
           docker tag credit-mlops-infer "$INFERENCE_IMAGE"
           docker push "$INFERENCE_IMAGE"
