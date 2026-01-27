@@ -66,6 +66,7 @@ pipeline {
 
         export TRAIN_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-train:latest"
         export INFERENCE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-infer:latest"
+        export SM_BASE_IMAGE="763104351884.dkr.ecr.${AWS_REGION}.amazonaws.com/sklearn:1.2-1.0-1-cpu-py3"
 
         {
           echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
@@ -75,6 +76,7 @@ pipeline {
           echo "MODEL_GROUP=$MODEL_GROUP"
           echo "TRAIN_IMAGE=$TRAIN_IMAGE"
           echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
+          echo "SM_BASE_IMAGE=$SM_BASE_IMAGE"
         } > "$WORKSPACE/.env_infra"
         '''
       }
@@ -127,7 +129,7 @@ pipeline {
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
 
-          docker build -t credit-mlops-infer "$WORKSPACE/inference"
+          docker build --build-arg SM_BASE_IMAGE=$SM_BASE_IMAGE -t credit-mlops-infer "$WORKSPACE/inference"
           docker tag credit-mlops-infer "$INFERENCE_IMAGE"
           docker push "$INFERENCE_IMAGE"
         '''
