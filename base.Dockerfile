@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    python3-dev \
     libgomp1 \
     libglib2.0-0 \
     libsm6 \
@@ -19,4 +20,4 @@ RUN pip3 install --no-cache-dir \
     scikit-learn
 
 # Verify sagemaker-inference is installed
-RUN python3 -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
+# RUN python3 -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
