@@ -1,6 +1,7 @@
 FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /opt/ml/code
 
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -14,7 +15,10 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+# Bind pip to python3 explicitly
+RUN python3 -m pip install --upgrade pip
+
+RUN python3 -m pip install --no-cache-dir \
     flask \
     gunicorn \
     gevent \
@@ -22,10 +26,13 @@ RUN pip install --no-cache-dir \
     pandas \
     scikit-learn
 
-RUN pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir \
     git+https://github.com/aws/sagemaker-inference-toolkit.git
 
-RUN pip list | grep sagemaker
+# Copy your serve script
+COPY serve.py /opt/ml/code/serve.py
 
-# Verify sagemaker-inference is installed
-RUN python3 -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
+ENV SAGEMAKER_PROGRAM serve.py
+
+# Always use python3 at runtime
+ENTRYPOINT ["python3", "-m", "sagemaker_inference.server"]
