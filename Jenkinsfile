@@ -66,7 +66,8 @@ pipeline {
 
         export TRAIN_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-train:latest"
         export INFERENCE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-infer:latest"
-        export SM_BASE_IMAGE="763104351884.dkr.ecr.us-west-2.amazonaws.com/sklearn:1.2-1.0-1-cpu-py3"
+        export BASE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-base:latest"
+        export SM_BASE_IMAGE="$BASE_IMAGE"
 
         {
           echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
@@ -76,6 +77,7 @@ pipeline {
           echo "MODEL_GROUP=$MODEL_GROUP"
           echo "TRAIN_IMAGE=$TRAIN_IMAGE"
           echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
+          echo "BASE_IMAGE=$BASE_IMAGE"
           echo "SM_BASE_IMAGE=$SM_BASE_IMAGE"
         } > "$WORKSPACE/.env_infra"
         '''
@@ -94,6 +96,25 @@ pipeline {
         if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
           aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
         fi
+        '''
+      }
+    }
+
+    stage('Build & Push Base Image') {
+      when { expression { params.ACTION == 'APPLY' } }
+      steps {
+        sh '''
+        set -e
+        set -a
+        . "$WORKSPACE/.env_infra"
+        set +a
+
+        aws ecr get-login-password --region "$AWS_REGION" \
+          | docker login --username AWS --password-stdin "$(echo $BASE_IMAGE | cut -d/ -f1)"
+
+        docker build -f base.Dockerfile -t credit-base .
+        docker tag credit-base "$BASE_IMAGE"
+        docker push "$BASE_IMAGE"
         '''
       }
     }
@@ -128,9 +149,6 @@ pipeline {
 
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
-
-          aws ecr get-login-password --region "us-west-2" \
-            | docker login --username AWS --password-stdin 763104351884.dkr.ecr.us-west-2.amazonaws.com
 
           docker build --build-arg SM_BASE_IMAGE=$SM_BASE_IMAGE -t credit-mlops-infer "$WORKSPACE/inference"
           docker tag credit-mlops-infer "$INFERENCE_IMAGE"
