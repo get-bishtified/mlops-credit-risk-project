@@ -96,24 +96,6 @@ pipeline {
       }
     }
 
-    stage('Resolve AWS Context') {
-      steps {
-        script {
-          env.AWS_ACCOUNT_ID = sh(
-            script: "aws sts get-caller-identity --query Account --output text",
-            returnStdout: true
-          ).trim()
-
-          env.SM_BASE_IMAGE = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/mlops-base/sklearn:1.2"
-        }
-
-        sh '''
-          echo "Account ID: $AWS_ACCOUNT_ID"
-          echo "SageMaker Base Image: $SM_BASE_IMAGE"
-        '''
-      }
-    }
-
     stage('Build & Push Training Image') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
@@ -145,10 +127,7 @@ pipeline {
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
 
-          docker build \
-            --build-arg SM_BASE_IMAGE=$SM_BASE_IMAGE \
-            -t credit-mlops-infer "$WORKSPACE/inference"
-
+          docker build -t credit-mlops-infer "$WORKSPACE/inference"
           docker tag credit-mlops-infer "$INFERENCE_IMAGE"
           docker push "$INFERENCE_IMAGE"
         '''
