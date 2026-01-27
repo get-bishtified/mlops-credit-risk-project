@@ -28,4 +28,4 @@ RUN pip install --no-cache-dir \
 RUN pip list | grep sagemaker
 
 # Verify sagemaker-inference is installed
-RUN python -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
+RUN python3 -c "import sagemaker_inference.server; print('sagemaker_inference installed')"
