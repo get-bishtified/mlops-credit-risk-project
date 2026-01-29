@@ -1,8 +1,17 @@
-FROM python:3.8-slim
-
-RUN pip install --no-cache-dir flask gunicorn joblib numpy pandas scikit-learn
+FROM python:3.8
 
 WORKDIR /opt/ml/code
+
+RUN python -m pip install --upgrade pip
+
+# Pin NumPy to a stable wheel and install deps
+RUN pip install --no-cache-dir \
+    flask \
+    gunicorn \
+    joblib \
+    numpy==1.26.4 \
+    pandas \
+    scikit-learn
 
 COPY app.py .
 
