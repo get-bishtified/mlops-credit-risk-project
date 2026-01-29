@@ -89,13 +89,10 @@ pipeline {
         . "$WORKSPACE/.env_infra"
         set +a
 
-        # Try to fetch a secure data S3 URI from AWS Secrets Manager (secret id: data-s3-uri)
-        # The secret can be a plain S3 URI like s3://bucket/path/to/data.csv
         SECURE_S3_URI=$(aws secretsmanager get-secret-value --secret-id data-s3-uri --query SecretString --output text 2>/dev/null || true)
 
         if [ -n "$SECURE_S3_URI" ]; then
           echo "Found secure data URI in Secrets Manager: $SECURE_S3_URI"
-          # Copy secure data into the raw bucket path expected by pipeline
           aws s3 cp "$SECURE_S3_URI" "s3://$RAW_BUCKET/train/data.csv"
         else
           if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
@@ -137,7 +134,10 @@ pipeline {
           aws ecr get-login-password --region "$AWS_REGION" \
             | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
 
-          docker build -t credit-mlops-infer "$WORKSPACE/inference"
+          # Purge any stale layers that could contain broken NumPy
+          docker system prune -af || true
+
+          docker build --no-cache -t credit-mlops-infer "$WORKSPACE/inference"
           docker tag credit-mlops-infer "$INFERENCE_IMAGE"
           docker push "$INFERENCE_IMAGE"
         '''
