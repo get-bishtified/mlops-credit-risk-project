@@ -50,87 +50,105 @@ pipeline {
     stage('Load Infra Outputs') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
-        sh '''
-        set -e
-        cd "$WORKSPACE/infra"
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+          set -e
+          cd "$WORKSPACE/infra"
 
-        rm -f "$WORKSPACE/.env_infra"
+          rm -f "$WORKSPACE/.env_infra"
 
-        export SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
-        export ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
-        export RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
-        export MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
-        export MODEL_GROUP=$(jq -r .model_group.value tf.json)
+          SAGEMAKER_ROLE_ARN=$(jq -r .sagemaker_role_arn.value tf.json)
+          ENDPOINT_NAME=$(jq -r .endpoint_name.value tf.json)
+          RAW_BUCKET=$(jq -r .raw_bucket.value tf.json)
+          MODEL_BUCKET=$(jq -r .model_bucket.value tf.json)
+          MODEL_GROUP=$(jq -r .model_group.value tf.json)
 
-        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-        export TRAIN_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-train:latest"
-        export INFERENCE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-infer:latest"
+          TRAIN_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-train:latest"
+          INFERENCE_IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/credit-mlops-infer:latest"
 
-        {
-          echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
-          echo "ENDPOINT_NAME=$ENDPOINT_NAME"
-          echo "RAW_BUCKET=$RAW_BUCKET"
-          echo "MODEL_BUCKET=$MODEL_BUCKET"
-          echo "MODEL_GROUP=$MODEL_GROUP"
-          echo "TRAIN_IMAGE=$TRAIN_IMAGE"
-          echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
-        } > "$WORKSPACE/.env_infra"
-        '''
+          {
+            echo "SAGEMAKER_ROLE_ARN=$SAGEMAKER_ROLE_ARN"
+            echo "ENDPOINT_NAME=$ENDPOINT_NAME"
+            echo "RAW_BUCKET=$RAW_BUCKET"
+            echo "MODEL_BUCKET=$MODEL_BUCKET"
+            echo "MODEL_GROUP=$MODEL_GROUP"
+            echo "TRAIN_IMAGE=$TRAIN_IMAGE"
+            echo "INFERENCE_IMAGE=$INFERENCE_IMAGE"
+          } > "$WORKSPACE/.env_infra"
+          '''
+        }
       }
     }
 
     stage('Ensure Training Data') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+          set -e
+          set -a
+          . "$WORKSPACE/.env_infra"
+          set +a
 
-        if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
-          aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
-        fi
-        '''
+          # Try to fetch a secure data S3 URI from AWS Secrets Manager (secret id: data-s3-uri)
+          # The secret can be a plain S3 URI like s3://bucket/path/to/data.csv
+          SECURE_S3_URI=$(aws secretsmanager get-secret-value --secret-id data-s3-uri --query SecretString --output text 2>/dev/null || true)
+
+          if [ -n "$SECURE_S3_URI" ]; then
+            echo "Found secure data URI in Secrets Manager: $SECURE_S3_URI"
+            # Copy secure data into the raw bucket path expected by pipeline
+            aws s3 cp "$SECURE_S3_URI" "s3://$RAW_BUCKET/train/data.csv"
+          else
+            if ! aws s3 ls "s3://$RAW_BUCKET/train/data.csv" >/dev/null 2>&1; then
+              aws s3 cp "$WORKSPACE/data/sample.csv" "s3://$RAW_BUCKET/train/data.csv"
+            fi
+          fi
+          '''
+        }
       }
     }
 
     stage('Build & Push Training Image') {
       when { expression { params.ACTION == 'APPLY' } }
       steps {
-        sh '''
-        set -e
-        set -a
-        . "$WORKSPACE/.env_infra"
-        set +a
-
-        aws ecr get-login-password --region "$AWS_REGION" \
-          | docker login --username AWS --password-stdin "$(echo $TRAIN_IMAGE | cut -d/ -f1)"
-
-        docker build -t credit-train "$WORKSPACE/training"
-        docker tag credit-train "$TRAIN_IMAGE"
-        docker push "$TRAIN_IMAGE"
-        '''
-      }
-    }
-
-    stage('Build & Push Inference Image') {
-      when { expression { params.ACTION == 'APPLY' } }
-      steps {
-        sh '''
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
           set -e
           set -a
           . "$WORKSPACE/.env_infra"
           set +a
 
           aws ecr get-login-password --region "$AWS_REGION" \
-            | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
+            | docker login --username AWS --password-stdin "$(echo $TRAIN_IMAGE | cut -d/ -f1)"
 
-          docker build -t credit-mlops-infer "$WORKSPACE/inference"
-          docker tag credit-mlops-infer "$INFERENCE_IMAGE"
-          docker push "$INFERENCE_IMAGE"
-        '''
+          docker build -t credit-train "$WORKSPACE/training"
+          docker tag credit-train "$TRAIN_IMAGE"
+          docker push "$TRAIN_IMAGE"
+          '''
+        }
+      }
+    }
+
+    stage('Build & Push Inference Image') {
+      when { expression { params.ACTION == 'APPLY' } }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+            set -e
+            set -a
+            . "$WORKSPACE/.env_infra"
+            set +a
+
+            aws ecr get-login-password --region "$AWS_REGION" \
+              | docker login --username AWS --password-stdin "$(echo $INFERENCE_IMAGE | cut -d/ -f1)"
+
+            docker build -t credit-mlops-infer "$WORKSPACE/inference"
+            docker tag credit-mlops-infer "$INFERENCE_IMAGE"
+            docker push "$INFERENCE_IMAGE"
+          '''
+        }
       }
     }
 
@@ -203,54 +221,60 @@ pipeline {
     stage('Pre-Destroy Cleanup (SageMaker)') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
-        sh '''
-        set -e
-        for ep in $(aws sagemaker list-endpoints --query 'Endpoints[].EndpointName' --output text); do
-          aws sagemaker delete-endpoint --endpoint-name "$ep" || true
-        done
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+          set -e
+          for ep in $(aws sagemaker list-endpoints --query 'Endpoints[].EndpointName' --output text); do
+            aws sagemaker delete-endpoint --endpoint-name "$ep" || true
+          done
 
-        for job in $(aws sagemaker list-training-jobs --status-equals InProgress --query 'TrainingJobSummaries[].TrainingJobName' --output text); do
-          aws sagemaker stop-training-job --training-job-name "$job" || true
-        done
+          for job in $(aws sagemaker list-training-jobs --status-equals InProgress --query 'TrainingJobSummaries[].TrainingJobName' --output text); do
+            aws sagemaker stop-training-job --training-job-name "$job" || true
+          done
 
-        sleep 60
-        '''
+          sleep 60
+          '''
+        }
       }
     }
 
     stage('Pre-Destroy Cleanup (S3)') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
-        sh '''
-        set -e
-        for b in $(aws s3 ls | awk '{print $3}' | grep "^${PROJECT}-"); do
-          aws s3 rm "s3://$b" --recursive || true
-        done
-        '''
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+          set -e
+          for b in $(aws s3 ls | awk '{print $3}' | grep "^${PROJECT}-"); do
+            aws s3 rm "s3://$b" --recursive || true
+          done
+          '''
+        }
       }
     }
 
     stage('Pre-Destroy Cleanup (ECR)') {
       when { expression { params.ACTION == 'DESTROY' } }
       steps {
-        sh '''
-        set -e
-        for repo in $(aws ecr describe-repositories \
-          --query "repositories[?starts_with(repositoryName, '${PROJECT}-')].repositoryName" \
-          --output text); do
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+          sh '''
+          set -e
+          for repo in $(aws ecr describe-repositories \
+            --query "repositories[?starts_with(repositoryName, '${PROJECT}-')].repositoryName" \
+            --output text); do
 
-          image_ids=$(aws ecr list-images \
-            --repository-name "$repo" \
-            --query 'imageIds[*]' \
-            --output json)
-
-          if [ "$image_ids" != "[]" ]; then
-            aws ecr batch-delete-image \
+            image_ids=$(aws ecr list-images \
               --repository-name "$repo" \
-              --image-ids "$image_ids" || true
-          fi
-        done
-        '''
+              --query 'imageIds[*]' \
+              --output json)
+
+            if [ "$image_ids" != "[]" ]; then
+              aws ecr batch-delete-image \
+                --repository-name "$repo" \
+                --image-ids "$image_ids" || true
+            fi
+          done
+          '''
+        }
       }
     }
 
