@@ -20,9 +20,7 @@ This repository implements a full end-to-end MLOps pipeline for a Credit Risk pr
 ### AWS
 
 - AWS account with admin (or equivalent) permissions
-- IAM role attached to Jenkins EC2 with:
-  - `AdministratorAccess` (lab/demo) **or**
-  - Fine-grained permissions for:
+- IAM role attached to Jenkins EC2 with fine-grained permissions for:
     - SageMaker
     - ECR
     - S3
