@@ -1,18 +1,18 @@
-FROM python:3.8
+FROM python:3.9
 
 WORKDIR /opt/ml/code
 
 RUN python -m pip install --upgrade pip
 
-# Pin NumPy to a stable wheel and install deps
 RUN pip install --no-cache-dir \
     flask \
     gunicorn \
     joblib \
-    numpy==1.26.4 \
+    numpy \
     pandas \
     scikit-learn
 
 COPY app.py .
 
+EXPOSE 8080
 ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
