@@ -1,144 +1,121 @@
 # Credit Risk MLOps Pipeline (AWS SageMaker + Jenkins + Terraform)
 
-This repository implements a full end-to-end MLOps pipeline for a Credit Risk prediction use case, designed to reflect real enterprise practices.
+This repository implements a **production-grade end-to-end MLOps pipeline** for a **Credit Risk prediction system**, reflecting how real enterprises build, deploy, operate, and safely destroy machine learning systems.
 
 ---
 
-## Architecture Overview
+## 🧠 What This Project Does
 
-- **Jenkins (EC2)** – CI/CD orchestrator  
-- **Terraform** – Infrastructure provisioning  
-- **Amazon S3** – Raw data, model artifacts  
-- **Amazon ECR** – Training & inference images  
-- **Amazon SageMaker** – Training jobs, model registry, endpoint  
-- **CloudWatch** – Logs and metrics  
+The system predicts the **probability of loan default** using features such as:
+- Age
+- Income
+- Loan amount
+- Repayment behavior
+
+This helps organizations decide whether a loan should be approved, priced higher, or flagged as high risk.
 
 ---
 
-## Prerequisites
+## 🏗️ Why This Is a Real MLOps Project
 
-### AWS
-- AWS account with admin (or equivalent) permissions
-- IAM role attached to Jenkins EC2 with:
-  - `AdministratorAccess` (lab/demo) **or**
-  - Fine-grained permissions for:
-    - SageMaker
-    - ECR
-    - S3
-    - IAM:PassRole
+This project demonstrates:
+- Infrastructure provisioning with Terraform
+- CI/CD for ML using Jenkins
+- Automated training, evaluation, and registration
+- SageMaker endpoint deployment
+- Secure data handling with S3 & Secrets Manager
+- Containerized training and inference
+- Safe destroy workflows with cleanup
 
-### Jenkins EC2
-- Instance type: **t3.large** (minimum)
-- OS: Amazon Linux 2 / Ubuntu 20.04
-- Installed:
+---
+
+## 🧰 Tech Stack
+AWS SageMaker, Jenkins, Terraform, Docker, ECR, S3, IAM, CloudWatch, Python (scikit-learn)
+
+---
+
+## 🔧 Prerequisites
+
+### AWS & Jenkins
+- AWS account with SageMaker, S3, ECR, IAM, CloudWatch access
+- Jenkins running on EC2 with:
   - Docker
+  - Terraform
   - Python 3.8+
-  - pip
-  - AWS CLI v2
-  - Terraform >= 1.4
-  - jq
-
-### Jenkins Plugins
-- Pipeline
-- Pipeline: Groovy
-- Git
-- Credentials Binding
+  - IAM instance role (no hardcoded credentials)
 
 ---
 
-## Repository Structure
+### S3 Training Data (MANDATORY)
 
+Training data must exist in S3.
+
+Expected location:
 ```
-mlops-credit-risk/
-├── infra/                # Terraform (S3, ECR, SageMaker, IAM)
-├── training/             # Training container
-├── inference/            # Inference container (Flask + Gunicorn)
-├── pipelines/            # Python orchestration scripts
-├── data/                 # Sample CSV
-├── tests/                # Pytest checks
-├── Jenkinsfile
-└── README.md
+s3://credit-mlops-raw-data/train/data.csv
 ```
+
+Data can be:
+- Copied from a secure source bucket, or
+- Taken from `data/sample.csv` as fallback
+
+Optional:
+- Store secure S3 URI in Secrets Manager under `data-s3-uri`
+
+⚠️ Training will fail if data is missing.
 
 ---
 
-## Deployment Flow (APPLY)
+## 🚀 Deployment Steps
 
-1. Jenkins checkout & tests
-2. Terraform provisions infra
-3. S3 training data ensured
-4. Training & inference images built and pushed to ECR
-5. SageMaker training job triggered
-6. Model evaluated
-7. Model registered to Model Package Group
-8. Manual approval gate
-9. Endpoint deployed
-10. Health check executed
+1. Upload or configure training data
+2. Run Jenkins with ACTION=APPLY
+3. Approve deployment when prompted
+4. Test endpoint `/ping` and `/invocations`
+5. Monitor CloudWatch logs
 
 ---
 
-## Testing the Endpoint
+## 🧪 Testing
 
-### Get Endpoint Name
+Health check:
 ```
-aws sagemaker list-endpoints
-```
-
-### Invoke Endpoint
-Create `payload.csv`:
-```
-35,55000,20000
+curl http://<endpoint-url>/ping
 ```
 
-Invoke:
+Prediction:
 ```
-aws sagemaker-runtime invoke-endpoint   --endpoint-name credit-mlops-endpoint   --content-type text/csv   --body payload.csv   output.json
-```
-
-Expected output:
-```
-0.0   # (example prediction)
+curl -X POST http://<endpoint-url>/invocations -d "25,30000,10000"
 ```
 
 ---
 
-## Monitoring
+## 🧹 Destroy Requirements
 
-- CloudWatch Logs:
-  - `/aws/sagemaker/Endpoints/credit-mlops-endpoint`
-- Metrics:
-  - Invocations
-  - Latency
-  - 4XX / 5XX errors
+### Model Package Cleanup
 
----
+Before destroy:
+```
+aws sagemaker list-model-packages --model-package-group-name credit-mlops-credit-risk
+```
 
-## DESTROY – ⚠️ WARNING
-
-Running **DESTROY** will permanently delete:
-
-- SageMaker endpoints
-- Training jobs
-- Model package groups
-- S3 buckets (emptied first)
-- ECR repositories (images deleted first)
-- IAM roles created by Terraform
-
-❗ **This action is irreversible**
-
-A manual Jenkins confirmation is required before destroy executes.
+Delete any remaining packages manually.
 
 ---
 
-## Enterprise Notes
+### Destroy Warning ⚠️
 
-- No credentials hardcoded
-- Image versioning supported
-- Safe cleanup before destroy
-- Ready for GitOps extension
-- Can be extended with:
-  - Model monitoring
-  - Drift detection
-  - CI policy enforcement
+DESTROY removes all infrastructure, data, images, and models.
+Use only in non-production environments.
 
+---
 
+## 🎓 Learning Outcomes
+- End-to-end ML system lifecycle
+- Production MLOps workflows
+- SageMaker operational constraints
+- Safe infrastructure teardown
+
+---
+
+Happy building 🚀
